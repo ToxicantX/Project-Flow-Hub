@@ -48,7 +48,14 @@ if [ -z "$changed" ]; then
   exit 0
 fi
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "__SYNC_SCRIPT__" -Slug "__SLUG__" -SourceDirectory "__DIAGRAMS_PATH__"__COVER_ARGUMENT__
+failure_marker="$(git rev-parse --git-dir)/project-flow-hub-sync.failed"
+if powershell.exe -NoProfile -ExecutionPolicy Bypass -File "__SYNC_SCRIPT__" -Slug "__SLUG__" -SourceDirectory "__DIAGRAMS_PATH__"__COVER_ARGUMENT__; then
+  rm -f "$failure_marker"
+else
+  printf '%s\n' "Project-Flow-Hub synchronization failed. Re-run the commit or invoke sync-project.ps1 manually." > "$failure_marker"
+  echo "Project-Flow-Hub synchronization failed; see $failure_marker" >&2
+  exit 1
+fi
 '@
 $content = $template.Replace('__SYNC_SCRIPT__', $syncScript).Replace('__SLUG__', $Slug).Replace('__DIAGRAMS_PATH__', $diagramsPath).Replace('__WATCH_PATH__', $watchPath).Replace('__COVER_ARGUMENT__', $coverArgument)
 $content = $content.Replace("`r`n", "`n")

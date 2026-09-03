@@ -17,6 +17,13 @@ $hubRoot = Split-Path -Parent $PSScriptRoot
 $sourceRoot = (Resolve-Path -LiteralPath $SourceDirectory).Path
 $worktree = Join-Path $env:TEMP ('project-flow-hub-sync-' + [guid]::NewGuid().ToString('N'))
 
+# Git exports repository-local variables to hooks. They must not leak into
+# commands targeting the independent Hub repository.
+$gitLocalVariables = @(git rev-parse --local-env-vars 2>$null)
+foreach ($name in $gitLocalVariables | Where-Object { $_ }) {
+    Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+}
+
 function Invoke-Checked {
     param([scriptblock]$Command, [string]$FailureMessage)
     & $Command

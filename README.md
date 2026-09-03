@@ -48,6 +48,8 @@ python -m http.server 4173 --directory dist
 
 只有提交包含 `diagrams/` 变化时才会触发。同步过程使用临时 Git worktree，不修改 Hub 的当前工作目录；导入、测试和构建通过后才提交并推送 Hub，随后触发正式站点自动发布。
 
+同步失败不会撤销已经完成的源仓库提交，但会留下 `.git/project-flow-hub-sync.failed`，并在提交输出中报告错误；修复后可重新提交，或手动执行 `sync-project.ps1`。
+
 当源仓库已有远端默认分支后，建议迁移为 GitHub 跨仓库触发。迁移前保留本地 hook，避免流程图更新漏同步。
 
 ## 自动发布
