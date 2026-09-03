@@ -15,7 +15,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $hubRoot = Split-Path -Parent $PSScriptRoot
 $sourceRoot = (Resolve-Path -LiteralPath $SourceDirectory).Path
-$worktree = Join-Path $env:TEMP ('project-flow-hub-sync-' + [guid]::NewGuid().ToString('N'))
+$systemTemp = [IO.Path]::GetTempPath()
+$worktree = Join-Path $systemTemp ('project-flow-hub-sync-' + [guid]::NewGuid().ToString('N'))
 $powerShellHost = if ($env:OS -eq 'Windows_NT') { 'powershell.exe' } else { 'pwsh' }
 
 $gitLocalVariables = @(git rev-parse --local-env-vars 2>$null)
@@ -107,7 +108,7 @@ try {
     }
     Write-Host "Synchronized $Slug from $shortCommit."
 } finally {
-    $tempRoot = [IO.Path]::GetFullPath($env:TEMP) + [IO.Path]::DirectorySeparatorChar
+    $tempRoot = [IO.Path]::GetFullPath($systemTemp).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     $resolvedWorktree = [IO.Path]::GetFullPath($worktree)
     if ($resolvedWorktree.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)) {
         git -C $hubRoot worktree remove --force $resolvedWorktree 2>$null

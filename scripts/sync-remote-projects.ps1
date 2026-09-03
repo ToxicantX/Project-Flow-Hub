@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $hubRoot = Split-Path -Parent $PSScriptRoot
 $projectsRoot = Join-Path $hubRoot 'projects'
-$tempRoot = Join-Path $env:TEMP ('project-flow-hub-remotes-' + [guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('project-flow-hub-remotes-' + [guid]::NewGuid().ToString('N'))
 
 function Invoke-Checked {
     param([scriptblock]$Command, [string]$FailureMessage)
