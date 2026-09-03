@@ -35,6 +35,21 @@ python -m http.server 4173 --directory dist
 
 脚本只复制清单列出的 HTML、JSON 规格和封面，不修改源项目。
 
+### 本地仓库提交后自动同步
+
+源仓库尚未接入 GitHub Actions 时，可以安装本地 `post-commit` hook：
+
+```powershell
+.\scripts\install-local-hook.ps1 `
+  -SourceRepository E:\workspace\ComfyUIProjects\Movie-Generation `
+  -Slug movie-generation `
+  -CoverSource 00-full-pipeline-overview.visual-check.1440x900.dark.png
+```
+
+只有提交包含 `diagrams/` 变化时才会触发。同步过程使用临时 Git worktree，不修改 Hub 的当前工作目录；导入、测试和构建通过后才提交并推送 Hub，随后触发正式站点自动发布。
+
+当源仓库已有远端默认分支后，建议迁移为 GitHub 跨仓库触发。迁移前保留本地 hook，避免流程图更新漏同步。
+
 ## 自动发布
 
 GitHub 仓库需要以下 Actions Secrets：
