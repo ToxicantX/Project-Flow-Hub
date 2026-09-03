@@ -7,6 +7,13 @@
   "status": "开发中",
   "repository": "https://github.com/ToxicantX/Comic-Generation",
   "notion": "https://app.notion.com/p/Comic-Generation-39a84839dbe4812db6e8fac61d6a3c97",
+  "source": {
+    "mode": "remote",
+    "repository": "https://github.com/ToxicantX/Comic-Generation.git",
+    "ref": "main",
+    "directory": "diagrams",
+    "cover": "cover.png"
+  },
   "updated": "2026-09-03",
   "cover": "cover.png",
   "flows": [
@@ -16,5 +23,9 @@
       "file": "flows/00-runtime-architecture.html",
       "spec": "flows/00-runtime-architecture.json"
     }
-  ]
+  ],
+  "provenance": {
+    "commit": "b8e7d113ab47859f93157e3293998cf78fed4c07",
+    "artifactHash": "b5d844a67b046af9605a42342165c173fa55cab1e2514d81a2e4c35a947296b8"
+  }
 }

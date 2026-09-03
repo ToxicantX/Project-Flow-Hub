@@ -19,10 +19,29 @@ function safeRelativePath(value, field) {
     throw new Error(`${field} must be a non-empty relative path`);
   }
   const normalized = value.replaceAll("\\", "/");
-  if (normalized.split("/").includes("..")) {
+  if (normalized.startsWith("/") || /^[a-zA-Z]:/.test(normalized) || normalized.split("/").includes("..")) {
     throw new Error(`${field} cannot leave the project directory`);
   }
   return normalized;
+}
+
+function validateHttpsUrl(value, field) {
+  if (value === undefined || value === "") return;
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${field} must be a valid HTTPS URL`);
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new Error(`${field} must be a valid HTTPS URL`);
+  }
+}
+
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 async function loadProjects(projectsDir) {
@@ -44,11 +63,37 @@ async function loadProjects(projectsDir) {
         throw new Error(`${manifest.slug}: ${field} is required`);
       }
     }
+    if (!isValidDate(manifest.updated)) {
+      throw new Error(`${manifest.slug}: updated must be a valid YYYY-MM-DD date`);
+    }
+    validateHttpsUrl(manifest.repository, `${manifest.slug}.repository`);
+    validateHttpsUrl(manifest.notion, `${manifest.slug}.notion`);
     manifest.cover = safeRelativePath(manifest.cover, `${manifest.slug}.cover`);
+    await readFile(path.join(projectDir, manifest.cover));
+    if (manifest.source !== undefined) {
+      if (!manifest.source || !["local", "remote"].includes(manifest.source.mode)) {
+        throw new Error(`${manifest.slug}.source.mode must be local or remote`);
+      }
+      validateHttpsUrl(manifest.source.repository, `${manifest.slug}.source.repository`);
+      if (typeof manifest.source.ref !== "string" || !/^[A-Za-z0-9._/-]+$/.test(manifest.source.ref) || manifest.source.ref.includes("..")) {
+        throw new Error(`${manifest.slug}.source.ref is invalid`);
+      }
+      manifest.source.directory = safeRelativePath(manifest.source.directory, `${manifest.slug}.source.directory`);
+      manifest.source.cover = safeRelativePath(manifest.source.cover, `${manifest.slug}.source.cover`);
+    }
+    if (manifest.provenance !== undefined) {
+      if (!manifest.provenance || !/^(?:[a-f0-9]{7,40}|working-tree)$/.test(manifest.provenance.commit || "")) {
+        throw new Error(`${manifest.slug}.provenance.commit is invalid`);
+      }
+      if (!/^[a-f0-9]{64}$/.test(manifest.provenance.artifactHash || "")) {
+        throw new Error(`${manifest.slug}.provenance.artifactHash is invalid`);
+      }
+    }
     if (!Array.isArray(manifest.flows) || manifest.flows.length === 0) {
       throw new Error(`${manifest.slug}: flows cannot be empty`);
     }
     const flowIds = new Set();
+    const flowPaths = new Set();
     for (const flow of manifest.flows) {
       if (!idPattern.test(flow.id) || flowIds.has(flow.id)) {
         throw new Error(`${manifest.slug}: invalid or duplicate flow id ${flow.id}`);
@@ -59,11 +104,23 @@ async function loadProjects(projectsDir) {
       }
       flow.file = safeRelativePath(flow.file, `${manifest.slug}.${flow.id}.file`);
       flow.spec = safeRelativePath(flow.spec, `${manifest.slug}.${flow.id}.spec`);
+      if (flowPaths.has(flow.file) || flowPaths.has(flow.spec) || flow.file === flow.spec) {
+        throw new Error(`${manifest.slug}.${flow.id}: duplicate flow path`);
+      }
+      flowPaths.add(flow.file);
+      flowPaths.add(flow.spec);
       if (!flow.file.endsWith(".html") || !flow.spec.endsWith(".json")) {
         throw new Error(`${manifest.slug}.${flow.id}: expected HTML file and JSON spec`);
       }
+      if (flow.sourceFile !== undefined) safeRelativePath(flow.sourceFile, `${manifest.slug}.${flow.id}.sourceFile`);
+      if (flow.sourceSpec !== undefined) safeRelativePath(flow.sourceSpec, `${manifest.slug}.${flow.id}.sourceSpec`);
       const html = await readFile(path.join(projectDir, flow.file), "utf8");
-      await readFile(path.join(projectDir, flow.spec), "utf8");
+      const spec = await readFile(path.join(projectDir, flow.spec), "utf8");
+      try {
+        JSON.parse(spec);
+      } catch {
+        throw new Error(`${manifest.slug}.${flow.id}: JSON spec is invalid`);
+      }
       if (!html.includes('name="generator" content="archify')) {
         throw new Error(`${manifest.slug}.${flow.id}: HTML is not an Archify delivery`);
       }
@@ -156,7 +213,11 @@ function projectPage(project) {
 </html>`;
 }
 
-export async function buildSite({ root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), outputDir } = {}) {
+export async function buildSite({
+  root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
+  outputDir,
+  revision = process.env.FLOW_HUB_REVISION || "local"
+} = {}) {
   const projectsDir = path.join(root, "projects");
   const distDir = outputDir || path.join(root, "dist");
   const projects = await loadProjects(projectsDir);
@@ -179,7 +240,9 @@ export async function buildSite({ root = path.resolve(path.dirname(fileURLToPath
   }
 
   await writeFile(path.join(distDir, "index.html"), homePage(projects), "utf8");
-  await writeFile(path.join(distDir, "health.json"), `${JSON.stringify({ status: "ok", projects: projects.length })}\n`, "utf8");
+  const sourceCommits = Object.fromEntries(projects.map((project) => [project.slug, project.provenance?.commit || null]));
+  const health = { status: "ok", projects: projects.length, projectSlugs: projects.map((project) => project.slug), revision, sourceCommits };
+  await writeFile(path.join(distDir, "health.json"), `${JSON.stringify(health)}\n`, "utf8");
   return { projects: projects.length, outputDir: distDir };
 }
 

@@ -22,12 +22,24 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Test
         run: npm test
 
       - name: Build
+        env:
+          FLOW_HUB_REVISION: ${{ github.sha }}
         run: npm run build
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser smoke test
+        run: npm run test:browser
 
       - name: Configure deployment SSH
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -59,6 +71,9 @@ jobs:
 
       - name: Verify public site
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          EXPECTED_REVISION: ${{ github.sha }}
         run: |
-          curl --fail --show-error --silent --retry 4 --retry-delay 2 \
-            https://draw.wsxcant.me/health.json
+          health="$(curl --fail --show-error --silent --retry 4 --retry-delay 2 \
+            https://draw.wsxcant.me/health.json)"
+          node -e 'const h=JSON.parse(process.argv[1]); if(h.revision!==process.env.EXPECTED_REVISION) process.exit(1)' "$health"

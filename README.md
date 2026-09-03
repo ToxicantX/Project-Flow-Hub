@@ -12,45 +12,50 @@ python -m http.server 4173 --directory dist
 
 打开 `http://127.0.0.1:4173/`。
 
-## 添加项目
+## 接入项目
 
-1. 在 `projects/<slug>/project.json` 新建项目清单。
-2. 将 Archify 已交付的 HTML 和对应 JSON 规格放入 `projects/<slug>/flows/`。
-3. 设置一张项目封面；可以使用 Archify `visual-check` 产生的截图。
-4. 运行 `npm test` 和 `npm run build`。
-5. 提交并推送 `main`，GitHub Actions 自动发布。
+项目元数据和流程清单保存在源仓库的 `diagrams/project-flow.json`。可从
+`projects/_template/project-flow.json` 复制模板，并让每个流程条目指向一份已通过 Archify
+验证和交付的 HTML 与 JSON 规格。项目封面也必须位于 `diagrams/` 内。
 
-项目清单中的 `slug`、流程 `id` 必须唯一。流程文件必须位于本项目目录，构建器拒绝绝对路径和 `..` 路径。
-
-## 同步已有 Archify 项目
-
-先维护目标项目的 `project.json`，然后执行：
+首次接入执行：
 
 ```powershell
-.\scripts\import-archify.ps1 `
-  -Slug movie-generation `
-  -SourceDirectory E:\workspace\ComfyUIProjects\Movie-Generation\diagrams `
-  -CoverSource 00-full-pipeline-overview.visual-check.1440x900.dark.png
+.\scripts\onboard-project.ps1 `
+  -SourceRepository E:\workspace\ComfyUIProjects\Movie-Generation
 ```
 
-脚本只复制清单列出的 HTML、JSON 规格和封面，不修改源项目。
+脚本读取源清单、导入对应产物、运行 Hub 测试和构建，并按源仓库的 Git 状态选择同步模式。
+`slug`、流程 `id` 和目标文件路径必须唯一；绝对路径和越过 `diagrams/` 或项目目录的路径会被拒绝。
 
 ### 本地仓库提交后自动同步
 
-源仓库尚未接入 GitHub Actions 时，可以安装本地 `post-commit` hook：
+`source.mode` 为 `local`，或源仓库还没有远端默认分支时，接入脚本会安装受管的
+`post-commit` hook。只有提交包含 `diagrams/` 变化时才会触发；同步使用临时 Git worktree，
+不会改写 Hub 当前工作目录。导入、测试和构建通过后才提交并推送 Hub。
+
+同步失败不会撤销源仓库提交，但会留下 `.git/project-flow-hub-sync.failed`。修复后可重新提交，
+或手动执行：
 
 ```powershell
-.\scripts\install-local-hook.ps1 `
-  -SourceRepository E:\workspace\ComfyUIProjects\Movie-Generation `
+.\scripts\sync-project.ps1 `
   -Slug movie-generation `
-  -CoverSource 00-full-pipeline-overview.visual-check.1440x900.dark.png
+  -SourceDirectory E:\workspace\ComfyUIProjects\Movie-Generation\diagrams
 ```
 
-只有提交包含 `diagrams/` 变化时才会触发。同步过程使用临时 Git worktree，不修改 Hub 的当前工作目录；导入、测试和构建通过后才提交并推送 Hub，随后触发正式站点自动发布。
+### 远端仓库定时同步
 
-同步失败不会撤销已经完成的源仓库提交，但会留下 `.git/project-flow-hub-sync.failed`，并在提交输出中报告错误；修复后可重新提交，或手动执行 `sync-project.ps1`。
+当公开 GitHub 仓库已有远端默认分支时，将源清单的 `source.mode` 设为 `remote`。Hub 的
+`sync-remote-projects.yml` 每 5 分钟拉取一次所有远端项目；检测到产物变化后记录来源提交和
+产物哈希，测试并提交 Hub，再触发唯一的部署工作流。正常同步存在最多约 5 分钟的发现延迟。
 
-当源仓库已有远端默认分支后，建议迁移为 GitHub 跨仓库触发。迁移前保留本地 hook，避免流程图更新漏同步。
+可在 Hub 中只验证某个远端项目而不提交：
+
+```powershell
+.\scripts\sync-remote-projects.ps1 -Slug comic-generation -NoPush
+```
+
+远端链路完成一次端到端验证后，才删除该源仓库原有的本地同步 hook。
 
 ## 自动发布
 

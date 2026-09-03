@@ -20,6 +20,16 @@ if ([IO.Path]::IsPathRooted($DiagramsDirectory) -or $watchPath.Split('/') -conta
     throw 'DiagramsDirectory must stay inside the source repository'
 }
 $sourceDiagrams = (Resolve-Path -LiteralPath (Join-Path $sourceRoot $DiagramsDirectory)).Path
+$sourcePrefix = $sourceDiagrams.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+if ($CoverSource) {
+    if ([IO.Path]::IsPathRooted($CoverSource)) {
+        throw 'CoverSource must stay inside the diagrams directory'
+    }
+    $resolvedCover = [IO.Path]::GetFullPath((Join-Path $sourceDiagrams $CoverSource))
+    if (-not $resolvedCover.StartsWith($sourcePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CoverSource must stay inside the diagrams directory'
+    }
+}
 $gitDirectory = git -C $sourceRoot rev-parse --git-dir
 if ($LASTEXITCODE -ne 0 -or -not $gitDirectory) {
     throw "Not a Git repository: $sourceRoot"
@@ -28,7 +38,7 @@ if (-not [IO.Path]::IsPathRooted($gitDirectory)) {
     $gitDirectory = Join-Path $sourceRoot $gitDirectory
 }
 
-$hookPath = Join-Path $gitDirectory 'hooks\post-commit'
+$hookPath = Join-Path (Join-Path $gitDirectory 'hooks') 'post-commit'
 $marker = '# project-flow-hub managed hook'
 if (Test-Path -LiteralPath $hookPath -PathType Leaf) {
     $existing = Get-Content -Raw -LiteralPath $hookPath
@@ -37,13 +47,17 @@ if (Test-Path -LiteralPath $hookPath -PathType Leaf) {
     }
 }
 
-$syncScript = (Join-Path $hubRoot 'scripts\sync-project.ps1').Replace('\', '/')
+$syncScript = (Join-Path (Join-Path $hubRoot 'scripts') 'sync-project.ps1').Replace('\', '/')
 $diagramsPath = $sourceDiagrams.Replace('\', '/')
-$coverArgument = if ($CoverSource) { " -CoverSource `"$CoverSource`"" } else { '' }
+$escapedSyncScript = $syncScript.Replace('\', '\\').Replace('"', '\"').Replace('$', '\$').Replace('`', '\`')
+$escapedDiagramsPath = $diagramsPath.Replace('\', '\\').Replace('"', '\"').Replace('$', '\$').Replace('`', '\`')
+$escapedWatchPath = $watchPath.Replace('\', '\\').Replace('"', '\"').Replace('$', '\$').Replace('`', '\`')
+$escapedCover = if ($CoverSource) { $CoverSource.Replace('\', '/').Replace('"', '\"').Replace('$', '\$').Replace('`', '\`') } else { '' }
+$coverArgument = if ($CoverSource) { " -CoverSource `"$escapedCover`"" } else { '' }
 $template = @'
 #!/bin/sh
 # project-flow-hub managed hook
-changed="$(git diff-tree --root --no-commit-id --name-only -r HEAD -- __WATCH_PATH__/)"
+changed="$(git diff-tree --root --no-commit-id --name-only -r HEAD -- "__WATCH_PATH__/")"
 if [ -z "$changed" ]; then
   exit 0
 fi
@@ -57,7 +71,7 @@ else
   exit 1
 fi
 '@
-$content = $template.Replace('__SYNC_SCRIPT__', $syncScript).Replace('__SLUG__', $Slug).Replace('__DIAGRAMS_PATH__', $diagramsPath).Replace('__WATCH_PATH__', $watchPath).Replace('__COVER_ARGUMENT__', $coverArgument)
+$content = $template.Replace('__SYNC_SCRIPT__', $escapedSyncScript).Replace('__SLUG__', $Slug).Replace('__DIAGRAMS_PATH__', $escapedDiagramsPath).Replace('__WATCH_PATH__', $escapedWatchPath).Replace('__COVER_ARGUMENT__', $coverArgument)
 $content = $content.Replace("`r`n", "`n")
 [IO.File]::WriteAllText($hookPath, $content, (New-Object Text.UTF8Encoding($false)))
 

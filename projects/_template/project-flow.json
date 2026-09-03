@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "slug": "example-project",
+  "name": "Example-Project",
+  "title": "示例项目流程",
+  "description": "一句话说明项目与流程范围。",
+  "status": "开发中",
+  "repository": "https://github.com/example/example-project",
+  "notion": "https://app.notion.com/p/example",
+  "source": {
+    "mode": "remote",
+    "repository": "https://github.com/example/example-project.git",
+    "ref": "main",
+    "directory": "diagrams",
+    "cover": "cover.png"
+  },
+  "updated": "2026-09-03",
+  "cover": "cover.png",
+  "flows": [
+    {
+      "id": "00",
+      "title": "流程总览",
+      "file": "flows/00-overview.html",
+      "spec": "flows/00-overview.json"
+    }
+  ]
+}
