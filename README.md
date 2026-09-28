@@ -1,6 +1,53 @@
 # Project Flow Hub
 
-`draw.wsxcant.me` 的项目流程图门户。项目和流程导航由清单生成，推送 `main` 后由 GitHub Actions 通过专用 SSH 用户原子发布。
+项目流程图门户，项目和流程导航由清单生成。旧服务器已停用，默认使用本地 Docker 部署；GitHub Actions 保留测试和构建，远程 SSH 发布默认关闭。
+
+## Docker 部署（推荐）
+
+需要 Docker Desktop 启用 Linux containers。在此仓库目录执行：
+
+```powershell
+$env:FLOW_HUB_REVISION = git rev-parse HEAD
+docker compose up -d --build
+docker compose ps
+```
+
+打开 `http://127.0.0.1:8765/`，漫画流程图入口为 `http://127.0.0.1:8765/comic-generation/`。
+漫画控制台仍在 `http://127.0.0.1:8199/`，这是两个独立应用，不需要启动 ComfyUI 来查看流程图。
+
+- `portal`：只读 Nginx，仅绑定本机地址，不暴露到局域网。
+- `sync`：启动后立即同步，然后每 300 秒复用 `sync-remote-projects.ps1 -Slug comic-generation -NoPush` 从公开 GitHub 导入漫画流程图；不更新视频项目、不推送 Git，仅在容器内维护独立 Git 比较基线，不读取本机工作树或认证信息。
+- `site`：独立命名卷，保存所有已发布版本。构建与测试成功后才原子切换 `current`；无变化不重复发布，同步失败保留旧版并在下一轮重试。已有版本不会在容器启动时被镜像旧版覆盖。
+- `/health.json`：当前页面版本和项目来源提交；`/sync-status.json`：同步状态、最近成功时间、漫画来源提交与产物哈希。容器健康只代表有可用页面，同步失败需查看后者及日志。
+
+状态与日常操作：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8765/health.json
+Invoke-RestMethod http://127.0.0.1:8765/sync-status.json
+docker compose logs --tail 80 sync
+docker compose restart sync       # 立即重试同步（保持门户在线）
+docker compose down               # 停止容器，保留发布卷
+docker compose up -d              # 恢复使用
+```
+
+端口冲突时，在启动前设置 `$env:FLOW_HUB_PORT = '8766'`。本机默认网络池已满，Compose 使用
+独立网段 `10.87.65.0/24`；迁移后若与现有网络冲突，通过 `FLOW_HUB_SUBNET` 指定空闲私有网段，不要清理其他项目的网络。同步间隔可通过
+`FLOW_SYNC_INTERVAL_SECONDS` 设置为 30–86400 秒。Docker Desktop 需启动后才能自动恢复服务。
+更新门户程序需拉取最新 Hub 代码并再次执行 `docker compose up -d --build`；流程图变化则自动同步。
+初次离线启动仍能查看镜像内的版本，但无法更新远端流程图。
+
+迁移到其他电脑时，克隆仓库并执行上面的 Docker 命令即可；要保留发布历史，需要另行备份和恢复
+`project-flow-hub_site` 卷。不要运行 `docker compose down -v`，这会删除发布历史；此卷不存储小说、漫画图片或数据库。
+本部署不访问原服务器，不依赖原 DNS，也不挂载 Docker socket、SSH 私钥或 `.env`。
+
+验证 Docker 页面可复用浏览器烟测（需 `npm ci` 和 `npx playwright install chromium`）：
+
+```powershell
+$env:FLOW_HUB_BASE_URL = 'http://127.0.0.1:8765/'
+npm run test:browser
+Remove-Item Env:FLOW_HUB_BASE_URL
+```
 
 ## 本地使用
 
@@ -57,7 +104,11 @@ python -m http.server 4173 --directory dist
 
 远端链路完成一次端到端验证后，才删除该源仓库原有的本地同步 hook。
 
-## 自动发布
+## 可选远程发布（默认关闭）
+
+只有仓库 Actions Variable `ENABLE_REMOTE_DEPLOY=true` 时才会执行 SSH 配置、发布和公网验收。
+未设置或为其他值时，仅运行测试、构建和浏览器检查，不连接已停用服务器。
+恢复远程发布前必须重新验证部署主机、域名及 SSH 指纹，不复用旧机器的信任记录。
 
 GitHub 仓库需要以下 Actions Secrets：
 

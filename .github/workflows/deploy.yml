@@ -42,7 +42,7 @@ jobs:
         run: npm run test:browser
 
       - name: Configure deployment SSH
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: vars.ENABLE_REMOTE_DEPLOY == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -55,7 +55,7 @@ jobs:
           chmod 600 ~/.ssh/project-flow-hub ~/.ssh/known_hosts
 
       - name: Publish release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: vars.ENABLE_REMOTE_DEPLOY == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -70,7 +70,7 @@ jobs:
             'bash -s --' "$release_id" "$archive" < scripts/deploy-release.sh
 
       - name: Verify public site
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: vars.ENABLE_REMOTE_DEPLOY == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           EXPECTED_REVISION: ${{ github.sha }}
         run: |

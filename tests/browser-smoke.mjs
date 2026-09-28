@@ -18,9 +18,9 @@ const server = createServer(async (request, response) => {
     response.writeHead(404).end("Not found");
   }
 });
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const { port } = server.address();
-const home = `http://127.0.0.1:${port}/`;
+const externalHome = process.env.FLOW_HUB_BASE_URL;
+if (!externalHome) await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const home = externalHome || `http://127.0.0.1:${server.address().port}/`;
 const browser = await chromium.launch({ headless: true });
 
 try {
@@ -56,5 +56,5 @@ try {
   }
 } finally {
   await browser.close();
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }

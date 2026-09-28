@@ -1,0 +1,56 @@
+name: project-flow-hub
+
+services:
+  sync:
+    build:
+      context: .
+      target: sync
+      args:
+        FLOW_HUB_REVISION: ${FLOW_HUB_REVISION:-local-docker}
+    restart: unless-stopped
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      FLOW_SYNC_SLUG: comic-generation
+      FLOW_SYNC_INTERVAL_SECONDS: ${FLOW_SYNC_INTERVAL_SECONDS:-300}
+    volumes:
+      - site:/site
+    healthcheck:
+      test: [CMD, node, -e, "const h=require('/site/current/health.json');if(h.status!=='ok')process.exit(1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  portal:
+    build:
+      context: .
+      target: portal
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp
+    depends_on:
+      sync:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FLOW_HUB_PORT:-8765}:8080"
+    volumes:
+      - site:/site:ro
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/health.json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  site:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${FLOW_HUB_SUBNET:-10.87.65.0/24}

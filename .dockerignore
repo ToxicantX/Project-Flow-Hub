@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!compose.yml
+!package.json
+!package-lock.json
+!src/**
+!scripts/**
+!tests/**
+!projects/**
+!deploy/**
